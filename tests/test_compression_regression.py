@@ -7,7 +7,7 @@ def test_scan_with_searchable_text_still_compressible(tmp_path):
     # Simulates an OCR-backed scanned page: large RGB raster plus selectable text.
     source = tmp_path / 'scan.pdf'
     image_path = tmp_path / 'scan.png'
-    image = Image.new('RGB', (1100, 1400), (250, 248, 245))
+    image = Image.effect_noise((1100, 1400), 20).point(lambda v: 235 + v // 13).convert('RGB')
     for row in range(40, 1300, 24):
         for x in range(80, 1000):
             image.putpixel((x, row), (25, 26, 27))
