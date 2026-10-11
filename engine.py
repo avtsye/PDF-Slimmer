@@ -9,7 +9,7 @@ from pathlib import Path
 import fitz
 from PIL import Image, ImageOps, ImageFilter
 
-MODES = ('smart', 'lossless', 'gray', 'bw', 'bw-clean')
+MODES = ('smart', 'lossless', 'gray', 'bw', 'bw-clean', 'jbig2')
 PRESETS = {
     'small': {'mode': 'bw-clean', 'dpi': 150},
     'balanced': {'mode': 'smart', 'dpi': 200},
@@ -133,7 +133,15 @@ def convert(source, destination, mode='smart', dpi=200, keep_smaller=True,
         selected = mode
         if mode == 'smart':
             selected = 'lossless' if info['digital'] or (preserve_ocr and info['searchable']) else 'bw'
-        if selected == 'lossless':
+        if selected == 'jbig2':
+            from jbig2_backend import encode_pdf
+            base = Path(work) / 'jbig2.pdf'
+            encode_pdf(source, base, dpi=dpi, threshold=threshold, progress=progress, cancel=cancel)
+            if preserve_ocr and info['searchable']:
+                _ocr(base, temp)
+            else:
+                shutil.copy2(base, temp)
+        elif selected == 'lossless':
             with fitz.open(str(source)) as doc:
                 doc.save(str(temp), garbage=4, deflate=True, clean=False)
         elif selected == 'gray':
@@ -162,4 +170,4 @@ def convert(source, destination, mode='smart', dpi=200, keep_smaller=True,
                 'new_bytes': destination.stat().st_size,
                 'candidate_bytes': candidate_bytes, 'original_kept': original_kept,
                 'mode': selected, 'text_layer_may_be_lost':
-                    selected in ('bw', 'bw-clean') and not (preserve_ocr and info['searchable'])}
+                    selected in ('bw', 'bw-clean', 'jbig2') and not (preserve_ocr and info['searchable'])}
