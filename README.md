@@ -57,9 +57,6 @@ python -m pytest -q
 Actions מריץ בדיקות ואז מייצר קובץ EXE למשתמש Windows. הבנייה אינה כוללת Ghostscript או OCRmyPDF.
 
 
-## ממשק 3.0
-הממשק החדש נמצא ב-`app_v3.py`, עם ניווט למסך ראשי, מסך תוצאות והגדרות, ערכת נושא בהירה/כהה, תצוגה מקדימה והוספת תיקייה. הממשק הישן ב-`app.py` נשמר כגיבוי: `python app.py`. פעולת ההמרה נשארת ב-`engine.py` ללא שינוי. הממשק עובד לאחר התקנת התלויות גם ללא חיבור לרשת.
-
 
 ## Windows 11 interface (3.1)
-Run `python app_win11.py` or `start-windows.bat`. The new single-screen design has a file queue, quick compression settings, separate advanced settings and preview windows, and an always-visible conversion footer. Existing `app.py` and `app_v3.py` are preserved as backups. Compression is still handled by the unchanged `engine.py`.
+Only one supported GUI entry point: `python app.py` or `start-windows.bat`. `engine.py` provides all conversion methods without UI-specific changes.
