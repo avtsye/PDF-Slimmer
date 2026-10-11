@@ -4,6 +4,8 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageOps, ImageTk
+import fitz
 from engine import convert, inspect_pdf, Cancelled
 
 LABELS = {'smart': 'חכמה — זיהוי אוטומטי של סוג המסמך',
@@ -35,8 +37,18 @@ class App(tk.Tk):
         self.keep = tk.BooleanVar(value=True)
         self.folder = tk.StringVar(value=str(Path.home() / 'Documents' / 'PDF-Slimmer'))
         self.status = tk.StringVar(value='מוכן לעבודה')
+        self._configure_style()
         self._build()
         self.after(100, self._poll)
+
+    def _configure_style(self):
+        style = ttk.Style(self)
+        if 'vista' in style.theme_names():
+            style.theme_use('vista')
+        style.configure('Treeview', rowheight=31, font=('Segoe UI', 10))
+        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'))
+        style.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'))
+        style.configure('TButton', padding=(12, 7))
 
     def _build(self):
         root = ttk.Frame(self, padding=18)
@@ -48,6 +60,7 @@ class App(tk.Tk):
         ttk.Button(actions, text='הוסף קובצי PDF', command=self._add).pack(side='right', padx=5)
         ttk.Button(actions, text='הסר מסומנים', command=self._remove).pack(side='right', padx=5)
         ttk.Button(actions, text='נקה רשימה', command=self._clear).pack(side='right', padx=5)
+        ttk.Button(actions, text='תצוגה מקדימה', command=self._preview).pack(side='right', padx=5)
         listing = ttk.Frame(root)
         listing.pack(fill='both', expand=True, pady=8)
         self.tree = ttk.Treeview(listing, columns=('file', 'size', 'pages', 'result'), show='headings', height=9)
@@ -101,6 +114,45 @@ class App(tk.Tk):
                 self.tree.insert('', 'end', iid=str(p), values=(p.name, human_size(info['bytes']), info['pages'], 'ממתין'))
             except Exception as exc:
                 messagebox.showerror('לא ניתן לפתוח', f'{p.name}\n{exc}')
+
+    def _preview(self):
+        chosen = self.tree.selection()
+        if not chosen:
+            messagebox.showinfo('תצוגה מקדימה', 'בחר תחילה קובץ מהרשימה')
+            return
+        window = tk.Toplevel(self)
+        window.title('תצוגה מקדימה — עמוד ראשון')
+        window.geometry('1040x680')
+        holder = ttk.Frame(window, padding=12)
+        holder.pack(fill='both', expand=True)
+        views = ttk.Frame(holder)
+        views.pack(fill='both', expand=True)
+        try:
+            with fitz.open(chosen[0]) as pdf:
+                pix = pdf[0].get_pixmap(matrix=fitz.Matrix(1.0, 1.0), colorspace=fitz.csRGB, alpha=False)
+                original = Image.frombytes('RGB', (pix.width, pix.height), pix.samples)
+            max_h, max_w = 580, 470
+            original.thumbnail((max_w, max_h))
+            modified = ImageOps.grayscale(original)
+            selected = self.mode.get()
+            if selected in ('bw', 'bw-clean'):
+                if selected == 'bw-clean':
+                    modified = ImageOps.autocontrast(modified, cutoff=1)
+                modified = modified.point(lambda v: 255 if v >= 190 else 0, mode='1')
+            frame_left = ttk.Frame(views)
+            frame_right = ttk.Frame(views)
+            frame_left.pack(side='left', expand=True, fill='both')
+            frame_right.pack(side='right', expand=True, fill='both')
+            for frame, title, im in ((frame_left, 'מקור', original), (frame_right, 'הדגמת ההמרה', modified)):
+                ttk.Label(frame, text=title, font=('Segoe UI', 12, 'bold')).pack(pady=4)
+                photo = ImageTk.PhotoImage(im)
+                label = ttk.Label(frame, image=photo)
+                label.image = photo
+                label.pack(expand=True)
+            ttk.Label(holder, text='הדמיה בלבד: אינה משקפת את גודל הקובץ הסופי, דחיסה או OCR.', anchor='e').pack(fill='x')
+        except Exception as exc:
+            window.destroy()
+            messagebox.showerror('שגיאת תצוגה', str(exc))
 
     def _remove(self):
         if self.running:
