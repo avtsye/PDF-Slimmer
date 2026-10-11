@@ -10,6 +10,8 @@ def main():
     parser.add_argument('--mode', choices=MODES, default='bw')
     parser.add_argument('--dpi', type=int, default=200)
     parser.add_argument('--allow-larger', action='store_true')
+    parser.add_argument('--workers', type=int, default=2)
+    parser.add_argument('--no-ocr', action='store_true')
     args = parser.parse_args()
     failed = 0
     for p in args.files:
@@ -19,7 +21,8 @@ def main():
             while dest.exists() or dest.resolve() == p.resolve():
                 dest = args.output / (p.stem + '_' + args.mode + f'_{index}.pdf')
                 index += 1
-            result = convert(p, dest, args.mode, args.dpi, not args.allow_larger)
+            result = convert(p, dest, args.mode, args.dpi, not args.allow_larger,
+                             workers=args.workers, preserve_ocr=not args.no_ocr)
             print(f"{p.name} -> {dest}: {result['old_bytes']:,} -> {result['new_bytes']:,} bytes")
         except Exception as e:
             failed += 1
