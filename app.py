@@ -4,9 +4,11 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, filedialog, messagebox
-from engine import convert, inspect_pdf
+from engine import convert, inspect_pdf, Cancelled
 
-LABELS = {'gray': 'גווני אפור (ניסיון לשמר טקסט וחיפוש)',
+LABELS = {'smart': 'חכמה — זיהוי אוטומטי של סוג המסמך',
+          'lossless': 'ללא אובדן — מיטוב PDF קיים',
+          'gray': 'גווני אפור (ניסיון לשמר טקסט וחיפוש)',
           'bw': 'שחור־לבן — דחיסה חזקה',
           'bw-clean': 'שחור־לבן — ניקוי רקע'}
 
@@ -25,7 +27,10 @@ class App(tk.Tk):
         self.files = []
         self.events = queue.Queue()
         self.running = False
-        self.mode = tk.StringVar(value='bw')
+        self.mode = tk.StringVar(value='smart')
+        self.workers = tk.IntVar(value=2)
+        self.preserve_ocr = tk.BooleanVar(value=True)
+        self.cancel_event = threading.Event()
         self.dpi = tk.IntVar(value=200)
         self.keep = tk.BooleanVar(value=True)
         self.folder = tk.StringVar(value=str(Path.home() / 'Documents' / 'PDF-Slimmer'))
@@ -36,7 +41,7 @@ class App(tk.Tk):
     def _build(self):
         root = ttk.Frame(self, padding=18)
         root.pack(fill='both', expand=True)
-        ttk.Label(root, text='PDF-Slimmer  |  ממיר ומקטין קובצי PDF',
+        ttk.Label(root, text='PDF-Slimmer 2.0  |  דחיסה חכמה של PDF',
                   font=('Segoe UI', 18, 'bold'), anchor='e').pack(fill='x', pady=(0, 12))
         actions = ttk.Frame(root)
         actions.pack(fill='x', pady=5)
@@ -63,10 +68,13 @@ class App(tk.Tk):
         optline.pack(fill='x', pady=4)
         ttk.Checkbutton(optline, text='אם אין חיסכון, שמור עותק של המקור',
                         variable=self.keep).pack(side='right', padx=15)
+        ttk.Checkbutton(optline, text='חידוש OCR במסמך סרוק המכיל טקסט', variable=self.preserve_ocr).pack(side='right', padx=10)
+        ttk.Label(optline, text='תהליכים:').pack(side='right')
+        ttk.Combobox(optline, values=[1,2,3,4,6,8], textvariable=self.workers, width=3, state='readonly').pack(side='right', padx=4)
         ttk.Label(optline, text='רזולוציה (DPI):').pack(side='right')
         ttk.Combobox(optline, values=[150, 200, 300, 400], textvariable=self.dpi,
                      width=6, state='readonly').pack(side='right', padx=6)
-        ttk.Label(root, text='שימו לב: מצבי שחור־לבן הופכים דפים לתמונות ועשויים להסיר שכבת OCR, קישורים וסימניות.',
+        ttk.Label(root, text='שימו לב: במצבי שחור־לבן קישורים וסימניות עשויים להימחק. לשחזור OCR דרושה התקנת OCRmyPDF.',
                   anchor='e', foreground='#9A5300').pack(fill='x')
         pathline = ttk.Frame(root)
         pathline.pack(fill='x', pady=10)
@@ -76,6 +84,8 @@ class App(tk.Tk):
         bottom.pack(fill='x', pady=8)
         self.start_button = ttk.Button(bottom, text='התחל המרה', command=self._start)
         self.start_button.pack(side='right', padx=5)
+        self.cancel_button = ttk.Button(bottom, text='בטל', command=self._cancel, state='disabled')
+        self.cancel_button.pack(side='right', padx=5)
         ttk.Label(bottom, textvariable=self.status).pack(side='right', padx=15)
         self.progress = ttk.Progressbar(bottom, mode='determinate')
         self.progress.pack(side='left', fill='x', expand=True, padx=8)
@@ -114,20 +124,28 @@ class App(tk.Tk):
     def _start(self):
         if self.running or not self.files:
             return
-        if self.mode.get() != 'gray' and not messagebox.askyesno('אזהרת שכבת טקסט',
+        if self.mode.get() in ('bw', 'bw-clean') and not messagebox.askyesno('אזהרת שכבת טקסט',
             'המרת שחור־לבן משטחת דפים לתמונות ועלולה לבטל OCR, טקסט ניתן לבחירה, קישורים וסימניות. להמשיך?'):
             return
         self.running = True
+        self.cancel_event.clear()
+        self.cancel_button.configure(state='normal')
         self.start_button.configure(state='disabled')
         self.progress['maximum'] = len(self.files)
         self.progress['value'] = 0
         tasks = list(self.files)
         threading.Thread(target=self._worker, args=(tasks, self.mode.get(), int(self.dpi.get()),
-                          self.folder.get(), self.keep.get()), daemon=True).start()
+                          self.folder.get(), self.keep.get(), int(self.workers.get()), self.preserve_ocr.get()), daemon=True).start()
 
-    def _worker(self, paths, mode, dpi, folder, keep):
+    def _cancel(self):
+        self.cancel_event.set()
+        self.status.set('מבטל לאחר העמוד הנוכחי...')
+
+    def _worker(self, paths, mode, dpi, folder, keep, workers, preserve_ocr):
         output_dir = Path(folder)
         for index, name in enumerate(paths):
+            if self.cancel_event.is_set():
+                break
             source = Path(name)
             target = output_dir / f'{source.stem}_{mode}.pdf'
             i = 2
@@ -135,7 +153,8 @@ class App(tk.Tk):
                 target = output_dir / f'{source.stem}_{mode}_{i}.pdf'
                 i += 1
             try:
-                result = convert(source, target, mode, dpi, keep)
+                result = convert(source, target, mode, dpi, keep, workers=workers,
+                                 preserve_ocr=preserve_ocr, cancel=self.cancel_event)
                 saving = (1-result['new_bytes']/max(1,result['old_bytes']))*100
                 message = f"{human_size(result['new_bytes'])} | חיסכון {saving:.1f}%"
                 if result['original_kept']:
@@ -160,7 +179,8 @@ class App(tk.Tk):
                 else:
                     self.running = False
                     self.start_button.configure(state='normal')
-                    self.status.set('העיבוד הסתיים; קבצי המקור לא שונו')
+                    self.cancel_button.configure(state='disabled')
+                    self.status.set('בוטל' if self.cancel_event.is_set() else 'העיבוד הסתיים; קבצי המקור לא שונו')
         except queue.Empty:
             pass
         self.after(100, self._poll)
