@@ -1,0 +1,1 @@
+Source: https://github.com/agl/jbig2enc | Commit: d0dfca46216c98f11312a9c9f15615ed490cd7b3 | SHA256: BD011AFF73717490998A1CB101CA42F0ED694398528C17C3A1A534F855D648B2 | Toolchain: MSVC x64 static vcpkg
