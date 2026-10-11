@@ -8,7 +8,8 @@ from PIL import Image, ImageOps, ImageTk
 import fitz
 from engine import convert, inspect_pdf, Cancelled
 
-LABELS = {'smart': 'חכמה — זיהוי אוטומטי של סוג המסמך',
+LABELS = {'jbig2': 'JBIG2 ללא אובדן פיקסלים — נדרש מקודד מקומי',
+          'smart': 'חכמה — זיהוי אוטומטי של סוג המסמך',
           'lossless': 'ללא אובדן — מיטוב PDF קיים',
           'gray': 'גווני אפור (ניסיון לשמר טקסט וחיפוש)',
           'bw': 'שחור־לבן — דחיסה חזקה',
@@ -135,7 +136,7 @@ class App(tk.Tk):
             original.thumbnail((max_w, max_h))
             modified = ImageOps.grayscale(original)
             selected = self.mode.get()
-            if selected in ('bw', 'bw-clean'):
+            if selected in ('bw', 'bw-clean', 'jbig2'):
                 if selected == 'bw-clean':
                     modified = ImageOps.autocontrast(modified, cutoff=1)
                 modified = modified.point(lambda v: 255 if v >= 190 else 0, mode='1')
@@ -176,7 +177,7 @@ class App(tk.Tk):
     def _start(self):
         if self.running or not self.files:
             return
-        if self.mode.get() in ('bw', 'bw-clean') and not messagebox.askyesno('אזהרת שכבת טקסט',
+        if self.mode.get() in ('bw', 'bw-clean', 'jbig2') and not messagebox.askyesno('אזהרת שכבת טקסט',
             'המרת שחור־לבן משטחת דפים לתמונות ועלולה לבטל OCR, טקסט ניתן לבחירה, קישורים וסימניות. להמשיך?'):
             return
         self.running = True
