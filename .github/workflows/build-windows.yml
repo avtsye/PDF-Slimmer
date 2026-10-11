@@ -20,7 +20,7 @@ jobs:
           if (Test-Path "bin/jbig2.exe") {
             pyinstaller --noconfirm --onefile --windowed --name PDF-Slimmer --add-binary "bin/jbig2.exe;bin" app_v3.py
           } else {
-            pyinstaller --noconfirm --onefile --windowed --name PDF-Slimmer app.py
+            pyinstaller --noconfirm --onefile --windowed --name PDF-Slimmer app_v3.py
             Write-Warning "JBIG2 binary not provided; EXE will not have JBIG2 compression until the binary is supplied."
           }
       - uses: actions/upload-artifact@v4
