@@ -18,7 +18,7 @@
 git clone https://github.com/avtsye/PDF-Slimmer.git
 cd PDF-Slimmer
 python -m pip install -r requirements.txt
-python app.py
+python app_v3.py
 ```
 
 או לחץ על `start-windows.bat`.
@@ -55,3 +55,7 @@ python -m pip install pytest
 python -m pytest -q
 ```
 Actions מריץ בדיקות ואז מייצר קובץ EXE למשתמש Windows. הבנייה אינה כוללת Ghostscript או OCRmyPDF.
+
+
+## ממשק 3.0
+הממשק החדש נמצא ב-`app_v3.py`, עם ניווט למסך ראשי, מסך תוצאות והגדרות, ערכת נושא בהירה/כהה, תצוגה מקדימה והוספת תיקייה. הממשק הישן ב-`app.py` נשמר כגיבוי: `python app.py`. פעולת ההמרה נשארת ב-`engine.py` ללא שינוי. הממשק עובד לאחר התקנת התלויות גם ללא חיבור לרשת.
