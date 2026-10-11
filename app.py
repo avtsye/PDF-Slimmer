@@ -52,19 +52,68 @@ class App(tk.Tk):
         style.configure('TButton', padding=(12, 7))
 
     def _build(self):
-        root = ttk.Frame(self, padding=18)
+        root = ttk.Frame(self, padding=12)
         root.pack(fill='both', expand=True)
+        # Reserve the action footer first: resizing must never hide the controls.
+        bottom = ttk.Frame(root)
+        bottom.pack(side='bottom', fill='x', pady=(6, 0))
+        self.start_button = ttk.Button(bottom, text='התחל המרה', command=self._start)
+        self.start_button.pack(side='right', padx=5)
+        self.cancel_button = ttk.Button(bottom, text='בטל', command=self._cancel, state='disabled')
+        self.cancel_button.pack(side='right', padx=5)
+        ttk.Label(bottom, textvariable=self.status).pack(side='right', padx=10)
+        self.progress = ttk.Progressbar(bottom, mode='determinate')
+        self.progress.pack(side='left', fill='x', expand=True, padx=8)
+
+        pathline = ttk.Frame(root)
+        pathline.pack(side='bottom', fill='x', pady=(4, 4))
+        ttk.Button(pathline, text='בחר תיקיית פלט', command=self._browse).pack(side='right')
+        ttk.Entry(pathline, textvariable=self.folder, justify='right').pack(side='right', fill='x', expand=True, padx=8)
+        ttk.Label(root, text='שימו לב: המרת שחור־לבן עשויה להסיר קישורים, סימניות ושכבות טקסט.',
+                  anchor='e', foreground='#9A5300').pack(side='bottom', fill='x', pady=(2, 0))
+
+        options = ttk.LabelFrame(root, text='אפשרויות עיבוד', padding=(10, 5))
+        options.pack(side='bottom', fill='x', pady=(4, 2))
+        mode_grid = ttk.Frame(options)
+        mode_grid.pack(fill='x')
+        modes = list(LABELS.items())
+        for index, (mode, label) in enumerate(modes):
+            # Two columns instead of six tall rows.
+            col = 1 - (index % 2)
+            row = index // 2
+            ttk.Radiobutton(mode_grid, text=label, variable=self.mode, value=mode).grid(
+                row=row, column=col, sticky='e', padx=12, pady=2)
+        mode_grid.columnconfigure(0, weight=1)
+        mode_grid.columnconfigure(1, weight=1)
+
+        settings_top = ttk.Frame(options)
+        settings_top.pack(fill='x', pady=(6, 2))
+        ttk.Checkbutton(settings_top, text='אם אין חיסכון, שמור את המקור',
+                        variable=self.keep).pack(side='right', padx=8)
+        ttk.Checkbutton(settings_top, text='חידוש OCR כשהמקור מכיל טקסט',
+                        variable=self.preserve_ocr).pack(side='right', padx=8)
+
+        settings_bottom = ttk.Frame(options)
+        settings_bottom.pack(fill='x', pady=(2, 0))
+        ttk.Label(settings_bottom, text='תהליכים:').pack(side='right')
+        ttk.Combobox(settings_bottom, values=[1, 2, 3, 4, 6, 8],
+                     textvariable=self.workers, width=3, state='readonly').pack(side='right', padx=5)
+        ttk.Label(settings_bottom, text='רזולוציה (DPI):').pack(side='right', padx=(12, 0))
+        ttk.Combobox(settings_bottom, values=[150, 200, 300, 400],
+                     textvariable=self.dpi, width=6, state='readonly').pack(side='right', padx=5)
+
         ttk.Label(root, text='PDF-Slimmer 2.0  |  דחיסה חכמה של PDF',
-                  font=('Segoe UI', 18, 'bold'), anchor='e').pack(fill='x', pady=(0, 12))
+                  font=('Segoe UI', 17, 'bold'), anchor='e').pack(side='top', fill='x', pady=(0, 7))
         actions = ttk.Frame(root)
-        actions.pack(fill='x', pady=5)
-        ttk.Button(actions, text='הוסף קובצי PDF', command=self._add).pack(side='right', padx=5)
-        ttk.Button(actions, text='הסר מסומנים', command=self._remove).pack(side='right', padx=5)
-        ttk.Button(actions, text='נקה רשימה', command=self._clear).pack(side='right', padx=5)
-        ttk.Button(actions, text='תצוגה מקדימה', command=self._preview).pack(side='right', padx=5)
+        actions.pack(side='top', fill='x', pady=(0, 5))
+        ttk.Button(actions, text='הוסף קובצי PDF', command=self._add).pack(side='right', padx=4)
+        ttk.Button(actions, text='הסר מסומנים', command=self._remove).pack(side='right', padx=4)
+        ttk.Button(actions, text='נקה רשימה', command=self._clear).pack(side='right', padx=4)
+        ttk.Button(actions, text='תצוגה מקדימה', command=self._preview).pack(side='right', padx=4)
         listing = ttk.Frame(root)
-        listing.pack(fill='both', expand=True, pady=8)
-        self.tree = ttk.Treeview(listing, columns=('file', 'size', 'pages', 'result'), show='headings', height=9)
+        listing.pack(side='top', fill='both', expand=True, pady=(3, 0))
+        self.tree = ttk.Treeview(listing, columns=('file', 'size', 'pages', 'result'),
+                                 show='headings', height=5)
         for key, label, width in [('file', 'שם קובץ', 350), ('size', 'גודל מקורי', 110),
                                   ('pages', 'עמודים', 75), ('result', 'תוצאה', 240)]:
             self.tree.heading(key, text=label, anchor='e')
@@ -73,36 +122,6 @@ class App(tk.Tk):
         self.tree.configure(yscrollcommand=bar.set)
         bar.pack(side='right', fill='y')
         self.tree.pack(fill='both', expand=True)
-        options = ttk.LabelFrame(root, text='אפשרויות עיבוד', padding=10)
-        options.pack(fill='x', pady=8)
-        for mode in LABELS:
-            ttk.Radiobutton(options, text=LABELS[mode], variable=self.mode,
-                            value=mode).pack(anchor='e')
-        optline = ttk.Frame(options)
-        optline.pack(fill='x', pady=4)
-        ttk.Checkbutton(optline, text='אם אין חיסכון, שמור עותק של המקור',
-                        variable=self.keep).pack(side='right', padx=15)
-        ttk.Checkbutton(optline, text='חידוש OCR במסמך סרוק המכיל טקסט', variable=self.preserve_ocr).pack(side='right', padx=10)
-        ttk.Label(optline, text='תהליכים:').pack(side='right')
-        ttk.Combobox(optline, values=[1,2,3,4,6,8], textvariable=self.workers, width=3, state='readonly').pack(side='right', padx=4)
-        ttk.Label(optline, text='רזולוציה (DPI):').pack(side='right')
-        ttk.Combobox(optline, values=[150, 200, 300, 400], textvariable=self.dpi,
-                     width=6, state='readonly').pack(side='right', padx=6)
-        ttk.Label(root, text='שימו לב: במצבי שחור־לבן קישורים וסימניות עשויים להימחק. לשחזור OCR דרושה התקנת OCRmyPDF.',
-                  anchor='e', foreground='#9A5300').pack(fill='x')
-        pathline = ttk.Frame(root)
-        pathline.pack(fill='x', pady=10)
-        ttk.Button(pathline, text='בחר תיקיית פלט', command=self._browse).pack(side='right')
-        ttk.Entry(pathline, textvariable=self.folder, justify='right').pack(side='right', fill='x', expand=True, padx=8)
-        bottom = ttk.Frame(root)
-        bottom.pack(fill='x', pady=8)
-        self.start_button = ttk.Button(bottom, text='התחל המרה', command=self._start)
-        self.start_button.pack(side='right', padx=5)
-        self.cancel_button = ttk.Button(bottom, text='בטל', command=self._cancel, state='disabled')
-        self.cancel_button.pack(side='right', padx=5)
-        ttk.Label(bottom, textvariable=self.status).pack(side='right', padx=15)
-        self.progress = ttk.Progressbar(bottom, mode='determinate')
-        self.progress.pack(side='left', fill='x', expand=True, padx=8)
 
     def _add(self):
         for name in filedialog.askopenfilenames(filetypes=[('PDF', '*.pdf')]):
