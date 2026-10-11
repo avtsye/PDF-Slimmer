@@ -1,9 +1,6 @@
 name: Vendor offline JBIG2 encoder
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/vendor-jbig2.yml'
 permissions:
   contents: write
 jobs:
@@ -13,34 +10,52 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - name: Fetch standalone Windows encoder and commit to repository
+      - name: Fetch Windows binary from upstream GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $release = Invoke-RestMethod -Headers @{ Accept='application/vnd.github+json'; Authorization="Bearer $env:GH_TOKEN" } -Uri 'https://api.github.com/repos/unpins/jbig2/releases/latest'
-          $asset = $release.assets | Where-Object { $_.name -match 'windows|win64|x86_64.*exe|amd64.*exe' } | Select-Object -First 1
-          if (-not $asset) { throw 'No Windows encoder asset in release; do not commit unverified binary.' }
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Accept='application/vnd.github+json'; Authorization="Bearer $env:GH_TOKEN"; 'User-Agent'='PDF-Slimmer' }
+          $repos = @('unpins/jbig2', 'agl/jbig2enc')
+          $selected = $null
+          foreach ($repo in $repos) {
+            try {
+              $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$repo/releases/latest"
+              $candidates = @($release.assets | Where-Object {
+                $_.name -match '(?i)(windows|win64|win-x64|x86_64.*(windows|mingw)|amd64.*(windows|mingw)|win.*x64)' -and
+                $_.name -match '(?i)\.(zip|exe)$'
+              })
+              if ($candidates.Count -gt 0) {
+                $selected = [pscustomobject]@{ repository=$repo; release=$release; asset=$candidates[0] }
+                break
+              }
+            } catch { Write-Warning "Cannot inspect $repo release: $_" }
+          }
+          if (-not $selected) { throw 'No matching Windows x64 release asset was found. Check release assets and update selector.' }
           New-Item -ItemType Directory -Force bin | Out-Null
-          $download = Join-Path $env:RUNNER_TEMP $asset.name
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download
-          if ($asset.name.EndsWith('.zip')) {
-            $tmp = Join-Path $env:RUNNER_TEMP 'jbig2-package'
-            Expand-Archive -Path $download -DestinationPath $tmp
-            $exe = Get-ChildItem $tmp -Filter 'jbig2.exe' -Recurse | Select-Object -First 1
-            if (-not $exe) { throw 'ZIP does not contain jbig2.exe' }
-            Copy-Item $exe.FullName bin/jbig2.exe
-          } elseif ($asset.name.EndsWith('.exe')) {
+          $download = Join-Path $env:RUNNER_TEMP $selected.asset.name
+          Invoke-WebRequest -Headers $headers -Uri $selected.asset.browser_download_url -OutFile $download
+          if ($selected.asset.name -match '(?i)\.zip$') {
+            $unpack = Join-Path $env:RUNNER_TEMP 'jbig2-unpacked'
+            Expand-Archive $download $unpack -Force
+            $binary = Get-ChildItem $unpack -Recurse -File | Where-Object { $_.Name -in @('jbig2.exe','jbig2enc.exe') } | Select-Object -First 1
+            if (-not $binary) { throw "Downloaded archive lacks jbig2.exe" }
+            Copy-Item $binary.FullName bin/jbig2.exe
+          } elseif ($selected.asset.name -match '(?i)\.exe$') {
             Copy-Item $download bin/jbig2.exe
-          } else { throw 'Unexpected release file format' }
+          } else { throw 'Unsupported binary archive extension' }
           $bytes = [IO.File]::ReadAllBytes('bin/jbig2.exe')
-          if ($bytes.Length -lt 10000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Invalid Windows executable' }
-          & ./bin/jbig2.exe -h 2>&1 | Out-Host
+          if ($bytes.Length -lt 10000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Downloaded file is not a PE executable' }
+          & ./bin/jbig2.exe --version
+          Write-Host "Encoder exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { throw 'Encoder binary cannot be started on this runner' }
           $hash = (Get-FileHash bin/jbig2.exe -Algorithm SHA256).Hash
-          "Upstream release: $($release.tag_name), file: $($asset.name), SHA256: $hash" | Set-Content bin/SOURCE.txt -Encoding utf8
+          "Source: $($selected.repository) | Release: $($selected.release.tag_name) | Asset: $($selected.asset.name) | SHA256: $hash" | Set-Content bin/SOURCE.txt -Encoding utf8
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add bin/jbig2.exe bin/SOURCE.txt
-          git commit -m 'Vendor portable JBIG2 Windows encoder for offline use'
-          git push
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host 'Binary already up-to-date'; exit 0 }
+          git commit -m 'Vendor Windows jbig2 encoder for offline use'
+          git push origin HEAD:main
