@@ -9,10 +9,10 @@ import fitz
 from engine import convert, inspect_pdf, Cancelled
 
 LABELS = {'jbig2': 'JBIG2 ללא אובדן פיקסלים — נדרש מקודד מקומי',
-          'smart': 'חכמה — זיהוי אוטומטי של סוג המסמך',
+          'smart': 'חכמה — שומרת OCR קיים, ייתכן חיסכון קטן',
           'lossless': 'ללא אובדן — מיטוב PDF קיים',
           'gray': 'גווני אפור (ניסיון לשמר טקסט וחיפוש)',
-          'bw': 'שחור־לבן — דחיסה חזקה',
+          'bw': 'שחור־לבן — דחיסה חזקה (מומלץ לסריקות)',
           'bw-clean': 'שחור־לבן — ניקוי רקע'}
 
 def human_size(n):
@@ -30,9 +30,9 @@ class App(tk.Tk):
         self.files = []
         self.events = queue.Queue()
         self.running = False
-        self.mode = tk.StringVar(value='smart')
+        self.mode = tk.StringVar(value='bw')
         self.workers = tk.IntVar(value=2)
-        self.preserve_ocr = tk.BooleanVar(value=True)
+        self.preserve_ocr = tk.BooleanVar(value=False)
         self.cancel_event = threading.Event()
         self.dpi = tk.IntVar(value=200)
         self.keep = tk.BooleanVar(value=True)
@@ -90,7 +90,7 @@ class App(tk.Tk):
         settings_top.pack(fill='x', pady=(6, 2))
         ttk.Checkbutton(settings_top, text='אם אין חיסכון, שמור את המקור',
                         variable=self.keep).pack(side='right', padx=8)
-        ttk.Checkbutton(settings_top, text='חידוש OCR כשהמקור מכיל טקסט',
+        ttk.Checkbutton(settings_top, text='חידוש OCR במידת הצורך (דורש OCRmyPDF)',
                         variable=self.preserve_ocr).pack(side='right', padx=8)
 
         settings_bottom = ttk.Frame(options)
@@ -230,7 +230,7 @@ class App(tk.Tk):
                 saving = (1-result['new_bytes']/max(1,result['old_bytes']))*100
                 message = f"{human_size(result['new_bytes'])} | חיסכון {saving:.1f}%"
                 if result['original_kept']:
-                    message += ' | המקור נשמר'
+                    message += ' | אין חיסכון: נשמר המקור'
             except Exception as exc:
                 message = 'שגיאה: ' + str(exc)[:120]
             self.events.put(('row', name, message, index+1))
