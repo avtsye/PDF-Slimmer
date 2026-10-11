@@ -1,6 +1,9 @@
 name: Vendor offline JBIG2 encoder
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/vendor-jbig2.yml'
 permissions:
   contents: write
 jobs:
