@@ -1,16 +1,17 @@
-"""Smoke tests for the new interface without requiring a graphical display."""
+"""Smoke tests for the sole supported desktop interface."""
 import ast
 from pathlib import Path
 
-def test_v3_interface_parses():
-    ast.parse(Path("app_v3.py").read_text(encoding="utf-8"))
+def test_app_parses():
+    ast.parse(Path("app.py").read_text(encoding="utf-8"))
 
-def test_v3_keeps_old_interface_and_engine():
-    assert Path("app.py").is_file()
-    assert Path("engine.py").is_file()
+def test_app_uses_compression_engine():
+    src = Path("app.py").read_text(encoding="utf-8")
+    assert "from engine import convert, inspect_pdf" in src
+    for method in ("add_files", "add_folder", "settings", "preview", "start", "stop", "_worker", "_poll"):
+        assert f"def {method}(" in src
 
-def test_new_interface_has_required_actions():
-    source = Path("app_v3.py").read_text(encoding="utf-8")
-    for method in ("add_files", "add_folder", "clear", "preview", "start_run",
-                   "cancel_run", "_poll", "_update_result_panel", "_settings"):
-        assert f"def {method}(" in source
+def test_only_one_gui_entrypoint():
+    assert Path("app.py").exists()
+    assert not Path("app_v3.py").exists()
+    assert not Path("app_win11.py").exists()
