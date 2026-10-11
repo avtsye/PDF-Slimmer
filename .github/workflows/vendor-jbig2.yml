@@ -20,11 +20,12 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Accept='application/vnd.github+json'; Authorization="Bearer $env:GH_TOKEN"; 'User-Agent'='PDF-Slimmer' }
-          $repos = @('unpins/jbig2', 'agl/jbig2enc')
+          $repos = @('agl/jbig2enc', 'unpins/jbig2')
           $selected = $null
           foreach ($repo in $repos) {
             try {
               $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$repo/releases/latest"
+              Write-Host "Release assets in $repo : $($release.assets.name -join ', ')"
               $candidates = @($release.assets | Where-Object {
                 $_.name -match '(?i)(windows|win64|win-x64|x86_64.*(windows|mingw)|amd64.*(windows|mingw)|win.*x64)' -and
                 $_.name -match '(?i)\.(zip|exe)$'
@@ -51,7 +52,6 @@ jobs:
           $bytes = [IO.File]::ReadAllBytes('bin/jbig2.exe')
           if ($bytes.Length -lt 10000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Downloaded file is not a PE executable' }
           & ./bin/jbig2.exe --version
-          Write-Host "Encoder exit code: $LASTEXITCODE"
           if ($LASTEXITCODE -ne 0) { throw 'Encoder binary cannot be started on this runner' }
           $hash = (Get-FileHash bin/jbig2.exe -Algorithm SHA256).Hash
           "Source: $($selected.repository) | Release: $($selected.release.tag_name) | Asset: $($selected.asset.name) | SHA256: $hash" | Set-Content bin/SOURCE.txt -Encoding utf8
